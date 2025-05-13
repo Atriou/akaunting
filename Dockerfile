@@ -1,29 +1,43 @@
-FROM thecodingmachine/php:8.1-v4-cli-node14
+# Étape 1: build PHP + Node.js + Composer
+FROM php:8.1-fpm-bullseye
 
+# Installer dépendances système
+RUN apt-get update && apt-get install -y \
+    zip unzip git curl libpng-dev libonig-dev libxml2-dev libzip-dev libpq-dev \
+    gnupg2 ca-certificates lsb-release wget \
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
+
+# Installer Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# Installer Node.js (version 16 stable)
+RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash - && \
+    apt-get install -y nodejs
+
+# Définir le dossier de travail
 WORKDIR /var/www
 
+# Copier les fichiers du projet
 COPY . .
 
-# Copier l'environnement
+# Installer dépendances PHP
+RUN composer install --optimize-autoloader --no-dev
+
+# Copier le fichier .env exemple
 RUN cp .env.example .env
 
-# Installer dépendances PHP (obligatoire AVANT artisan)
-RUN composer install --optimize-autoloader
-
-# Générer la clé Laravel
+# Générer la clé d'application
 RUN php artisan key:generate
 
 # Installer dépendances Node.js
 RUN npm install
+RUN npm run build
 
-# Builder assets frontend
-RUN NODE_OPTIONS="--max-old-space-size=1024" npm run build
-
-# Donner les bonnes permissions
+# Donner les permissions correctes
 RUN chown -R www-data:www-data /var/www
 
-# Exposer port HTTP
+# Exposer le port HTTP
 EXPOSE 8000
 
-# Lancer l'application
-CMD php artisan migrate --seed && php artisan serve --host=0.0.0.0 --port=8000
+# Démarrer le serveur PHP intégré
+CMD php artisan serve --host=0.0.0.0 --port=8000
